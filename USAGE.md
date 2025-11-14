@@ -78,6 +78,30 @@ python pg_to_epub.py mark-unread --id greatwork.html
 
 ## Advanced Options
 
+### Add a Cover Image
+
+Add a custom cover to your EPUB:
+
+```bash
+python pg_to_epub.py build --cover path/to/cover.jpg
+```
+
+**Recommended cover dimensions**: 1600 × 2400 pixels (2:3 ratio)  
+**Supported formats**: JPG, PNG, GIF, WEBP
+
+### Fast Rebuild (Using Cache)
+
+After the first build, content is cached. To quickly rebuild with different settings without re-downloading:
+
+```bash
+python pg_to_epub.py build --rebuild --cover new_cover.jpg
+```
+
+This is **much faster** (seconds instead of minutes) because it uses cached content. Perfect for:
+- Adding or changing the cover image
+- Changing sort order
+- Updating read/unread status without re-downloading
+
 ### Sort Order
 
 **Newest first (default):**
@@ -88,6 +112,14 @@ python pg_to_epub.py build --order desc
 **Oldest first:**
 ```bash
 python pg_to_epub.py build --order asc
+```
+
+### Force Refresh
+
+To clear cache and re-download everything:
+
+```bash
+python pg_to_epub.py build --force-refresh
 ```
 
 ### List Only Unread Essays
@@ -119,13 +151,15 @@ python pg_to_epub.py reset
    # Mark what you've read
    python pg_to_epub.py mark-read --title "Essay Title 1" "Essay Title 2"
    
-   # Regenerate EPUB
-   python pg_to_epub.py build
+   # Regenerate EPUB quickly from cache
+   python pg_to_epub.py build --rebuild
    
    # Copy updated EPUB to Kobo
    ```
 
 3. The new EPUB will have your read essays in the "Read Essays" section
+
+**Pro tip**: Use `--rebuild` for instant updates when you've only changed read/unread status!
 
 ## Tips
 
@@ -137,8 +171,11 @@ python pg_to_epub.py reset
 ## File Locations
 
 - **EPUB output**: Specified by `--output` flag (default: `pg_essays.epub` in current directory)
-- **State file**: `state.json` in the project root
-- **Cache**: `.cache/` directory (images and temporary files)
+- **State file**: `state.json` in the project root (tracks read/unread status)
+- **Cache**: `.cache/` directory
+  - `.cache/content/` - Cached essay HTML (for fast rebuilds)
+  - `.cache/images/` - Cached images from essays
+  - Total size: ~100-300 MB after first build
 
 ## Troubleshooting
 
@@ -149,7 +186,7 @@ python pg_to_epub.py reset
 - **Solution**: Install dependencies: `pip install -r requirements.txt`
 
 **Issue**: EPUB generation is slow
-- **Solution**: This is normal for the first run. Subsequent runs will be faster as dates and metadata are cached.
+- **Solution**: This is normal for the first run (5-15 minutes). Use `--rebuild` for subsequent builds to make them instant!
 
 **Issue**: Some essay dates show "Unknown date"
 - **Solution**: Some older essays don't have clear publication dates. They'll be grouped at the end within their section.

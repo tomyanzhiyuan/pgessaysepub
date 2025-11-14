@@ -15,6 +15,7 @@ from pg_epub.state import StateManager
 from pg_epub.scraper import Scraper
 from pg_epub.parser import ContentParser
 from pg_epub.epub_builder import EpubBuilder
+from pg_epub.cache import ContentCache
 
 
 def cmd_build(args):
@@ -27,39 +28,79 @@ def cmd_build(args):
     scraper = Scraper()
     parser = ContentParser(scraper=scraper)
     builder = EpubBuilder()
+    cache = ContentCache()
     
-    # Step 1: Fetch essay list
-    print("\n[1/4] Fetching essay list from paulgraham.com...")
-    essays_list = scraper.fetch_essay_list()
+    # Check if using rebuild mode
+    rebuild_mode = args.rebuild
+    force_refresh = args.force_refresh
     
-    if not essays_list:
-        print("Error: Could not fetch essay list")
-        return 1
+    # Handle force refresh - clear cache
+    if force_refresh:
+        print("\n[FORCE REFRESH] Clearing cache...")
+        cleared = cache.clear_cache()
+        print(f"Cleared {cleared} cached essays")
+        rebuild_mode = False  # Force refresh means don't use rebuild mode
     
-    print(f"Found {len(essays_list)} essays")
+    if rebuild_mode:
+        print("\n[REBUILD MODE] Using cached content")
+        cache_stats = cache.get_cache_stats()
+        print(f"Cache: {cache_stats['cached_essays']} essays ({cache_stats['total_size_mb']} MB)")
+        
+        # Check if we have state
+        if not state.essays:
+            print("Error: No state found. Run without --rebuild first to fetch essays.")
+            return 1
+        
+        essays_list = [
+            {
+                'id': e.essay_id,
+                'title': e.title,
+                'url': e.url,
+                'date': e.date,
+                'raw_date_str': e.raw_date_str
+            }
+            for e in state.get_all_essays()
+        ]
+    else:
+        # Step 1: Fetch essay list
+        print("\n[1/4] Fetching essay list from paulgraham.com...")
+        essays_list = scraper.fetch_essay_list()
+        
+        if not essays_list:
+            print("Error: Could not fetch essay list")
+            return 1
+        
+        print(f"Found {len(essays_list)} essays")
+        
+        # Step 2: Update state with new essays
+        print("\n[2/4] Updating essay metadata...")
+        for essay_data in essays_list:
+            state.update_essay(
+                essay_id=essay_data['id'],
+                title=essay_data['title'],
+                url=essay_data['url'],
+                date=essay_data['date'],
+                raw_date_str=essay_data['raw_date_str']
+            )
+        
+        state.save()
+        print(f"State updated with {len(state.essays)} essays")
     
-    # Step 2: Update state with new essays
-    print("\n[2/4] Updating essay metadata...")
-    for essay_data in essays_list:
-        state.update_essay(
-            essay_id=essay_data['id'],
-            title=essay_data['title'],
-            url=essay_data['url'],
-            date=essay_data['date'],
-            raw_date_str=essay_data['raw_date_str']
-        )
-    
-    state.save()
-    print(f"State updated with {len(state.essays)} essays")
-    
-    # Step 3: Fetch content for all essays
-    print("\n[3/4] Fetching and parsing essay content...")
-    print("This may take a few minutes...")
+    # Step 3: Fetch/Load content for all essays
+    step_num = "[3/4]" if not rebuild_mode else "[1/2]"
+    if rebuild_mode:
+        print(f"\n{step_num} Loading essay content from cache...")
+    else:
+        print(f"\n{step_num} Fetching and parsing essay content...")
+        print("This may take a few minutes...")
     
     unread_essays = []
     read_essays = []
     
     total = len(essays_list)
+    fetched_count = 0
+    cached_count = 0
+    
     for idx, essay_data in enumerate(essays_list, 1):
         essay_id = essay_data['id']
         essay_state = state.get_essay(essay_id)
@@ -69,24 +110,50 @@ def cmd_build(args):
         
         print(f"  [{idx}/{total}] {essay_state.title[:60]}...", end='', flush=True)
         
-        # Fetch content
-        html, extracted_date, extracted_raw_date = scraper.fetch_essay_content(essay_state.url)
+        # Try to load from cache first if in rebuild mode
+        content_html = None
+        images = []
         
-        if not html:
-            print(" [FAILED]")
-            continue
-        
-        # Update date if we found one in the essay
-        if extracted_date and not essay_state.date:
-            essay_state.date = extracted_date
-            essay_state.raw_date_str = extracted_raw_date
-        
-        # Parse content
-        content_html, images = parser.extract_main_content(
-            html=html,
-            base_url=essay_state.url,
-            title=essay_state.title
-        )
+        if rebuild_mode:
+            cached_data = cache.load_essay_content(essay_id)
+            if cached_data:
+                content_html, images = cached_data
+                cached_count += 1
+                print(f" [CACHED, {len(images)} images]")
+            else:
+                print(" [NOT CACHED - SKIPPING]")
+                continue
+        else:
+            # Try cache first even in normal mode
+            cached_data = cache.load_essay_content(essay_id)
+            if cached_data:
+                content_html, images = cached_data
+                cached_count += 1
+                print(f" [CACHED, {len(images)} images]")
+            else:
+                # Fetch content
+                html, extracted_date, extracted_raw_date = scraper.fetch_essay_content(essay_state.url)
+                
+                if not html:
+                    print(" [FAILED]")
+                    continue
+                
+                # Update date if we found one in the essay
+                if extracted_date and not essay_state.date:
+                    essay_state.date = extracted_date
+                    essay_state.raw_date_str = extracted_raw_date
+                
+                # Parse content
+                content_html, images = parser.extract_main_content(
+                    html=html,
+                    base_url=essay_state.url,
+                    title=essay_state.title
+                )
+                
+                # Cache the parsed content
+                cache.save_essay_content(essay_id, content_html, images)
+                fetched_count += 1
+                print(f" [OK, {len(images)} images]")
         
         # Build complete chapter HTML
         chapter_html = parser.build_chapter_html(
@@ -105,14 +172,17 @@ def cmd_build(args):
             read_essays.append(essay_dict)
         else:
             unread_essays.append(essay_dict)
-        
-        print(f" [OK, {len(images)} images]")
     
     # Save updated state
     state.save()
     
+    # Print stats
+    if not rebuild_mode and (fetched_count > 0 or cached_count > 0):
+        print(f"\nContent summary: {fetched_count} fetched, {cached_count} from cache")
+    
     # Step 4: Build EPUB
-    print(f"\n[4/4] Building EPUB...")
+    step_num = "[4/4]" if not rebuild_mode else "[2/2]"
+    print(f"\n{step_num} Building EPUB...")
     print(f"  - Unread essays: {len(unread_essays)}")
     print(f"  - Read essays: {len(read_essays)}")
     print(f"  - Sort order: {args.order}")
@@ -299,6 +369,11 @@ def main():
     build_parser.add_argument(
         '--cover', '-c',
         help='Path to cover image file (JPG, PNG, GIF, or WEBP)'
+    )
+    build_parser.add_argument(
+        '--rebuild',
+        action='store_true',
+        help='Rebuild EPUB from cached content (fast, no fetching)'
     )
     build_parser.add_argument(
         '--force-refresh',
