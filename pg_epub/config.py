@@ -13,10 +13,12 @@ PROJECT_ROOT = Path(__file__).parent.parent
 STATE_FILE = PROJECT_ROOT / "state.json"
 CACHE_DIR = PROJECT_ROOT / ".cache"
 IMAGES_CACHE_DIR = CACHE_DIR / "images"
+CONTENT_CACHE_DIR = CACHE_DIR / "content"
 
 # Ensure cache directories exist
 CACHE_DIR.mkdir(exist_ok=True)
 IMAGES_CACHE_DIR.mkdir(exist_ok=True)
+CONTENT_CACHE_DIR.mkdir(exist_ok=True)
 
 # EPUB metadata
 EPUB_TITLE = "Paul Graham Essays (Complete Collection)"

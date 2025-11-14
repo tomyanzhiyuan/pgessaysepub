@@ -49,6 +49,47 @@ class EpubBuilder:
         self.book = book
         return book
     
+    def set_cover(self, cover_image_path: Path) -> bool:
+        """
+        Set the cover image for the EPUB.
+        
+        Args:
+            cover_image_path: Path to the cover image file
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if not cover_image_path.exists():
+            print(f"Warning: Cover image not found: {cover_image_path}")
+            return False
+        
+        try:
+            # Read cover image
+            with open(cover_image_path, 'rb') as f:
+                cover_data = f.read()
+            
+            # Determine media type
+            suffix = cover_image_path.suffix.lower()
+            media_type = "image/jpeg"
+            if suffix in ['.jpg', '.jpeg']:
+                media_type = "image/jpeg"
+            elif suffix == '.png':
+                media_type = "image/png"
+            elif suffix == '.gif':
+                media_type = "image/gif"
+            elif suffix == '.webp':
+                media_type = "image/webp"
+            
+            # Set cover
+            self.book.set_cover("cover" + suffix, cover_data)
+            
+            print(f"✓ Cover image added: {cover_image_path.name}")
+            return True
+            
+        except Exception as e:
+            print(f"Warning: Could not set cover image: {e}")
+            return False
+    
     def add_chapter(
         self,
         chapter_id: str,
@@ -136,7 +177,8 @@ class EpubBuilder:
         unread_essays: List[Dict],
         read_essays: List[Dict],
         output_path: Path,
-        sort_order: str = SORT_ORDER_DESC
+        sort_order: str = SORT_ORDER_DESC,
+        cover_image_path: Optional[Path] = None
     ) -> bool:
         """
         Build complete EPUB with unread and read sections.
@@ -146,12 +188,17 @@ class EpubBuilder:
             read_essays: List of essay dicts with keys: essay_state, content_html, images
             output_path: Path to write EPUB file
             sort_order: 'asc' or 'desc' for date sorting
+            cover_image_path: Optional path to cover image file
         
         Returns:
             True if successful, False otherwise
         """
         try:
             self.create_book()
+            
+            # Set cover if provided
+            if cover_image_path:
+                self.set_cover(cover_image_path)
             
             # Sort essays
             unread_sorted = sorted(

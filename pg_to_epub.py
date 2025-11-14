@@ -118,11 +118,14 @@ def cmd_build(args):
     print(f"  - Sort order: {args.order}")
     
     output_path = Path(args.output)
+    cover_path = Path(args.cover) if args.cover else None
+    
     success = builder.build_epub(
         unread_essays=unread_essays,
         read_essays=read_essays,
         output_path=output_path,
-        sort_order=args.order
+        sort_order=args.order,
+        cover_image_path=cover_path
     )
     
     if success:
@@ -292,6 +295,10 @@ def main():
         choices=VALID_SORT_ORDERS,
         default=SORT_ORDER_DESC,
         help=f"Sort order: '{SORT_ORDER_ASC}' (oldest first) or '{SORT_ORDER_DESC}' (newest first, default)"
+    )
+    build_parser.add_argument(
+        '--cover', '-c',
+        help='Path to cover image file (JPG, PNG, GIF, or WEBP)'
     )
     build_parser.add_argument(
         '--force-refresh',
