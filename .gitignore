@@ -1,8 +1,9 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -17,32 +18,34 @@ sdist/
 var/
 wheels/
 *.egg-info/
-.installed.cfg
 *.egg
+MANIFEST
 
 # Virtual environments
 venv/
-env/
 ENV/
-.venv
-
-# Conda environments
-.conda/
-conda-env/
-
-# Project-specific
-.cache/
-state.json
-*.epub
+env/
+.venv/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
-Thumbs.db
 
+# Project specific
+.cache/
+state.json
+*.epub
+build.log
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Examples (reference EPUBs)
+examples/

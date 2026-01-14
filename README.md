@@ -1,165 +1,162 @@
 # Paul Graham Essays to EPUB
 
-A command-line tool that scrapes all essays from Paul Graham's website and compiles them into a single, well-organized EPUB file suitable for Kobo e-readers.
+[![CI](https://github.com/tomyanzhiyuan/pg-essays-epub/actions/workflows/ci.yml/badge.svg)](https://github.com/tomyanzhiyuan/pg-essays-epub/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A command-line tool that scrapes all essays from Paul Graham's website and compiles them into a single, well-organized EPUB file optimized for Kobo e-readers.
 
 ## Features
 
-- **Complete scraping**: Downloads all essays from paulgraham.com/articles.html
-- **Read/Unread tracking**: Maintains state of which essays you've read
-- **Organized TOC**: Separates unread and read essays in the table of contents
-- **Date sorting**: Orders essays by publication date (configurable)
-- **Clean formatting**: Minimal CSS optimized for e-ink displays
-- **Embedded images**: Includes inline images from articles
-- **Kobo-optimized**: Generates EPUBs that work perfectly on Kobo devices
+- **Complete Collection**: Downloads all 230+ essays from paulgraham.com
+- **Kobo-Optimized**: Generates clean EPUBs that work perfectly on Kobo devices
+- **Date Sorting**: Orders essays by publication date (newest first by default)
+- **Custom Cover**: Add your own cover image to the EPUB
+- **Smart Caching**: Only re-downloads essays when needed
+- **Clean Formatting**: Minimal CSS optimized for e-ink displays
+- **Embedded Images**: Includes inline images from articles
 
 ## Installation
 
-1. Clone this repository or download the files
-2. Create a virtual environment (recommended):
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On macOS/Linux
-   ```
+### From Source (Recommended)
 
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/tomyanzhiyuan/pg-essays-epub.git
+cd pg-essays-epub
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install in development mode
+pip install -e .
+```
+
+### Using pip
+
+```bash
+pip install pg-essays-epub
+```
+
+## Quick Start
+
+Generate an EPUB with all Paul Graham essays:
+
+```bash
+# Using the CLI command (after pip install)
+pg-essays-epub build --output pg_essays.epub
+
+# Or using Python directly
+python pg_to_epub.py build --output pg_essays.epub
+```
 
 ## Usage
 
 ### Build the EPUB
 
-Generate an EPUB containing all Paul Graham essays:
-
 ```bash
-python pg_to_epub.py build --output pg_essays.epub
+pg-essays-epub build --output pg_essays.epub --cover cover.png
 ```
 
 Options:
 - `--output`, `-o`: Output EPUB file path (default: `pg_essays.epub`)
-- `--order`: Sort order for essays: `asc` (oldest first) or `desc` (newest first) (default: `desc`)
-- `--force-refresh`: Force re-download of all essays, ignoring cache
-
-Example with options:
-```bash
-python pg_to_epub.py build --output ~/Desktop/pg_essays.epub --order asc
-```
+- `--cover`: Path to cover image (PNG or JPG)
+- `--order`: Sort order: `asc` (oldest first) or `desc` (newest first, default)
+- `--force-refresh`: Force re-download of all essays
+- `--rebuild`: Use cached content only (fastest, offline)
 
 ### List Essays
 
-View all essays with their read/unread status:
-
 ```bash
-python pg_to_epub.py list
+pg-essays-epub list              # All essays
+pg-essays-epub list --unread-only  # Only unread
 ```
 
-Options:
-- `--unread-only`: Show only unread essays
-- `--read-only`: Show only read essays
-
-### Mark Essays as Read
-
-Mark one or more essays as read:
+### Mark Essays as Read/Unread
 
 ```bash
-python pg_to_epub.py mark-read --id avg.html worked.html
+# By essay ID
+pg-essays-epub mark-read --id avg.html worked.html
+
+# By title (partial match)
+pg-essays-epub mark-read --title "Beating the Averages"
+
+# Mark as unread
+pg-essays-epub mark-unread --id avg.html
 ```
 
-Or mark by title (partial match):
-```bash
-python pg_to_epub.py mark-read --title "Beating the Averages" "How to Do Great Work"
-```
-
-### Mark Essays as Unread
-
-Mark essays as unread to revisit them:
-
-```bash
-python pg_to_epub.py mark-unread --id avg.html
-```
-
-### Reset All State
-
-Clear all read/unread state:
+### Reset State
 
 ```bash
-python pg_to_epub.py reset
+pg-essays-epub reset --confirm
 ```
-
-## How It Works
-
-1. **Scraping**: The tool fetches the articles index page, extracts all essay links and metadata
-2. **Content Extraction**: Each essay is downloaded and cleaned to extract just the article content
-3. **State Management**: Read/unread status is stored in `state.json` in your project directory
-4. **EPUB Generation**: All essays are compiled into a single EPUB with:
-   - Two main sections: "Unread Essays" and "Read Essays"
-   - Each chapter title prefixed with `[UNREAD]` or `[READ]`
-   - Essays sorted by publication date within each section
-   - Clean, readable CSS optimized for e-ink displays
 
 ## Project Structure
 
 ```
-pgessaysepub/
+pg-essays-epub/
 ├── pg_epub/
-│   ├── __init__.py
 │   ├── config.py         # Configuration constants
 │   ├── state.py          # Read/unread state management
-│   ├── scraper.py        # Essay list and content fetching
-│   ├── parser.py         # HTML content extraction and cleaning
-│   └── epub_builder.py   # EPUB file generation
+│   ├── scraper.py        # Essay fetching
+│   ├── parser.py         # HTML content extraction
+│   ├── epub_builder.py   # EPUB generation
+│   └── cache.py          # Content caching
+├── tests/                # Unit tests
 ├── pg_to_epub.py         # CLI entrypoint
-├── requirements.txt
-├── pyproject.toml
+├── pyproject.toml        # Package configuration
 └── README.md
 ```
 
-## State File
+## Development
 
-The tool maintains a `state.json` file that tracks:
-- Which essays you've read
-- Cached essay metadata (to avoid re-scraping)
-- Last update timestamp
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
 
-This file is automatically created on first run and updated as you use the tool.
+# Run tests
+pytest tests/ -v
+
+# Run linting
+ruff check pg_epub/ pg_to_epub.py
+
+# Format code
+black pg_epub/ pg_to_epub.py
+```
 
 ## Workflow
 
-Typical usage pattern (a few times per year):
+Typical usage (update every few months):
 
-1. Run `python pg_to_epub.py build` to generate the latest EPUB
-2. Copy the EPUB to your Kobo via USB
-3. Read essays on your Kobo
-4. When you want to update, mark essays as read:
-   ```bash
-   python pg_to_epub.py mark-read --title "Essay Name"
-   ```
-5. Regenerate the EPUB with updated read/unread sections
-6. Replace the old EPUB on your Kobo
+1. **Build**: `pg-essays-epub build -o essays.epub --cover cover.png`
+2. **Transfer**: Copy `essays.epub` to your Kobo via USB
+3. **Read**: Enjoy essays on your e-reader
+4. **Update**: When new essays are published, rebuild with `--force-refresh`
+
+## Troubleshooting
+
+**EPUB doesn't open on Kobo**
+- Ensure Kobo firmware is up to date
+- Try validating the EPUB with [EPUBCheck](https://www.w3.org/publishing/epubcheck/)
+
+**Images missing**
+- Some external images may fail to download (404 errors are normal)
+- The tool only includes images embedded in essay content
+
+**Build is slow**
+- First build downloads all essays (~230). Use `--rebuild` for subsequent builds
+- Cached content is stored in `.cache/`
 
 ## Requirements
 
 - Python 3.11 or higher
-- macOS (should work on Linux/Windows with minor adjustments)
-- Internet connection for scraping
-
-## Troubleshooting
-
-**Problem**: Some images aren't appearing in the EPUB
-- **Solution**: The tool only includes images that are embedded in essay content. External/decorative images are excluded by design.
-
-**Problem**: Essay dates are missing or incorrect
-- **Solution**: Some essays may not have dates. The tool attempts to extract dates from multiple sources but falls back to "Unknown date" if unavailable.
-
-**Problem**: EPUB doesn't open on Kobo
-- **Solution**: Ensure you're using a recent version of Kobo firmware. Try opening the EPUB on your computer first with Calibre to verify it's valid.
+- Internet connection (for initial scraping)
 
 ## License
 
-MIT License - Feel free to modify and use as needed.
+MIT License - See [LICENSE](LICENSE) for details.
 
 ## Credits
 
-All essay content © Paul Graham
-Tool created for personal educational use
+All essay content © Paul Graham. This tool is for personal educational use.
