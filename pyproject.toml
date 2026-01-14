@@ -32,9 +32,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/tomyanzhiyuan/pg-essays-epub"
-Repository = "https://github.com/tomyanzhiyuan/pg-essays-epub"
-Issues = "https://github.com/tomyanzhiyuan/pg-essays-epub/issues"
+Homepage = "https://github.com/tomyanzhiyuan/pgessaysepub"
+Repository = "https://github.com/tomyanzhiyuan/pgessaysepub"
+Issues = "https://github.com/tomyanzhiyuan/pgessaysepub/issues"
 
 [project.scripts]
 pg-essays-epub = "pg_to_epub:main"
