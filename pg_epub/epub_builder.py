@@ -24,10 +24,12 @@ class EpubBuilder:
     
     def __init__(self):
         self.book = None
+        self.added_images = set()  # Track added image filenames to avoid duplicates
     
     def create_book(self, custom_title: Optional[str] = None) -> epub.EpubBook:
         """Create and initialize a new EPUB book."""
         book = epub.EpubBook()
+        self.added_images = set()  # Reset for new book
         
         # Set metadata
         title = custom_title or f"{EPUB_TITLE} - {datetime.now().strftime('%Y-%m-%d')}"
@@ -49,26 +51,26 @@ class EpubBuilder:
         self.book = book
         return book
     
-    def set_cover(self, cover_image_path: Path) -> bool:
+    def set_cover(self, cover_image_path: Path) -> Optional[epub.EpubHtml]:
         """
-        Set the cover image for the EPUB.
+        Set the cover image for the EPUB and return cover page for spine.
         
         Args:
             cover_image_path: Path to the cover image file
         
         Returns:
-            True if successful, False otherwise
+            Cover HTML page if successful, None otherwise
         """
         if not cover_image_path.exists():
             print(f"Warning: Cover image not found: {cover_image_path}")
-            return False
+            return None
         
         try:
             # Read cover image
             with open(cover_image_path, 'rb') as f:
                 cover_data = f.read()
             
-            # Determine media type
+            # Determine media type and filename
             suffix = cover_image_path.suffix.lower()
             media_type = "image/jpeg"
             if suffix in ['.jpg', '.jpeg']:
@@ -80,15 +82,18 @@ class EpubBuilder:
             elif suffix == '.webp':
                 media_type = "image/webp"
             
-            # Set cover
+            # Set cover - this creates cover-img and cover.xhtml
             self.book.set_cover("cover" + suffix, cover_data)
             
+            # Get the cover page that was created
+            cover_page = self.book.get_item_with_id('cover')
+            
             print(f"✓ Cover image added: {cover_image_path.name}")
-            return True
+            return cover_page
             
         except Exception as e:
             print(f"Warning: Could not set cover image: {e}")
-            return False
+            return None
     
     def add_chapter(
         self,
@@ -112,6 +117,19 @@ class EpubBuilder:
         if images is None:
             images = []
         
+        # Validate content is not empty/invalid
+        from lxml import html as lxml_html
+        try:
+            # Test if content can be parsed - must have body content
+            test_doc = lxml_html.document_fromstring(content_html)
+            body = test_doc.find('.//body')
+            if body is None or not body.text_content().strip():
+                print(f"  [SKIPPING {chapter_id} - empty body]")
+                return None
+        except Exception as e:
+            print(f"  [SKIPPING {chapter_id} - invalid HTML: {e}]")
+            return None
+        
         # Create chapter
         chapter = epub.EpubHtml(
             title=title,
@@ -122,8 +140,12 @@ class EpubBuilder:
         chapter.content = content_html
         chapter.add_item(self.book.get_item_with_id('style'))
         
-        # Add images
+        # Add images (skip duplicates)
         for img_filename, img_data in images:
+            # Skip if already added
+            if img_filename in self.added_images:
+                continue
+            
             # Determine media type
             media_type = "image/jpeg"
             if img_filename.lower().endswith('.png'):
@@ -142,6 +164,7 @@ class EpubBuilder:
             )
             
             self.book.add_item(img_item)
+            self.added_images.add(img_filename)
         
         self.book.add_item(chapter)
         return chapter
@@ -196,95 +219,74 @@ class EpubBuilder:
         try:
             self.create_book()
             
-            # Set cover if provided
+            # Set cover if provided and get cover page for spine
+            cover_page = None
             if cover_image_path:
-                self.set_cover(cover_image_path)
+                cover_page = self.set_cover(cover_image_path)
             
-            # Sort essays
-            unread_sorted = sorted(
-                unread_essays,
-                key=lambda x: (
-                    0 if x['essay_state'].date else 1,
-                    x['essay_state'].date or '',
-                    x['essay_state'].title
-                ),
+            # Combine all essays (no separate unread/read sections since Kobo can't sync status)
+            all_essays = unread_essays + read_essays
+            
+            # Sort essays: with dates first (by date), then without dates at end (by title)
+            essays_with_dates = [e for e in all_essays if e['essay_state'].date]
+            essays_without_dates = [e for e in all_essays if not e['essay_state'].date]
+            
+            # Sort essays with dates by date
+            essays_with_dates.sort(
+                key=lambda x: (x['essay_state'].date, x['essay_state'].title),
                 reverse=(sort_order == SORT_ORDER_DESC)
             )
             
-            read_sorted = sorted(
-                read_essays,
-                key=lambda x: (
-                    0 if x['essay_state'].date else 1,
-                    x['essay_state'].date or '',
-                    x['essay_state'].title
-                ),
-                reverse=(sort_order == SORT_ORDER_DESC)
-            )
+            # Sort essays without dates by title
+            essays_without_dates.sort(key=lambda x: x['essay_state'].title)
+            
+            # Combine: dated essays first, then no-date essays at end
+            all_sorted = essays_with_dates + essays_without_dates
             
             # Build table of contents structure
             toc = []
-            spine = ['nav']
+            spine = []
             
-            # Add unread section
-            if unread_sorted:
-                unread_chapters = []
+            # Add cover first in spine if we have one
+            if cover_page:
+                spine.append(cover_page)
+            
+            spine.append('nav')
+            
+            # Add all essays (no [UNREAD]/[READ] tags since Kobo can't update status)
+            all_chapters = []
+            
+            for essay_dict in all_sorted:
+                essay = essay_dict['essay_state']
+                content_html = essay_dict['content_html']
+                images = essay_dict.get('images', [])
                 
-                for essay_dict in unread_sorted:
-                    essay = essay_dict['essay_state']
-                    content_html = essay_dict['content_html']
-                    images = essay_dict.get('images', [])
-                    
-                    # Build chapter title with [UNREAD] prefix
-                    date_suffix = f" ({essay.raw_date_str or essay.date or 'Unknown date'})"
-                    chapter_title = f"[UNREAD] {essay.title}{date_suffix}"
-                    
-                    # Create safe chapter ID
-                    chapter_id = f"unread_{essay.essay_id.replace('.html', '').replace('/', '_')}"
-                    
-                    chapter = self.add_chapter(
-                        chapter_id=chapter_id,
-                        title=chapter_title,
-                        content_html=content_html,
-                        images=images
-                    )
-                    
-                    unread_chapters.append(chapter)
-                    spine.append(chapter)
+                # Build chapter title - only add date if we have one
+                if essay.raw_date_str:
+                    chapter_title = f"{essay.title} ({essay.raw_date_str})"
+                elif essay.date:
+                    chapter_title = f"{essay.title} ({essay.date})"
+                else:
+                    chapter_title = essay.title
                 
-                # Add unread section to TOC
-                toc.append(
-                    (epub.Section('Unread Essays'), unread_chapters)
+                # Create safe chapter ID
+                chapter_id = f"essay_{essay.essay_id.replace('.html', '').replace('/', '_')}"
+                
+                chapter = self.add_chapter(
+                    chapter_id=chapter_id,
+                    title=chapter_title,
+                    content_html=content_html,
+                    images=images
                 )
-            
-            # Add read section
-            if read_sorted:
-                read_chapters = []
                 
-                for essay_dict in read_sorted:
-                    essay = essay_dict['essay_state']
-                    content_html = essay_dict['content_html']
-                    images = essay_dict.get('images', [])
-                    
-                    # Build chapter title with [READ] prefix
-                    date_suffix = f" ({essay.raw_date_str or essay.date or 'Unknown date'})"
-                    chapter_title = f"[READ] {essay.title}{date_suffix}"
-                    
-                    # Create safe chapter ID
-                    chapter_id = f"read_{essay.essay_id.replace('.html', '').replace('/', '_')}"
-                    
-                    chapter = self.add_chapter(
-                        chapter_id=chapter_id,
-                        title=chapter_title,
-                        content_html=content_html,
-                        images=images
-                    )
-                    
-                    read_chapters.append(chapter)
+                if chapter:  # Skip if add_chapter returned None
+                    all_chapters.append(chapter)
                     spine.append(chapter)
-                
-                # Add read section to TOC
+            
+            # Add all essays to TOC (single section)
+            if all_chapters:
                 toc.append(
-                    (epub.Section('Read Essays'), read_chapters)
+                    (epub.Section('Essays'), all_chapters)
                 )
             
             # Set TOC and spine
@@ -299,9 +301,7 @@ class EpubBuilder:
             epub.write_epub(str(output_path), self.book)
             
             print(f"\n✓ EPUB created successfully: {output_path}")
-            print(f"  - {len(unread_sorted)} unread essays")
-            print(f"  - {len(read_sorted)} read essays")
-            print(f"  - Total: {len(unread_sorted) + len(read_sorted)} essays")
+            print(f"  - {len(all_chapters)} essays")
             
             return True
             

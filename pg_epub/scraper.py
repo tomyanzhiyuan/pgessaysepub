@@ -36,7 +36,7 @@ class Scraper:
             print(f"Error fetching {url}: {e}")
             return None
     
-    def fetch_binary(self, url: str) -> Optional[bytes]:
+    def fetch_binary(self, url: str, silent: bool = False) -> Optional[bytes]:
         """Fetch binary content (e.g., images) from a URL."""
         try:
             time.sleep(REQUEST_DELAY)
@@ -44,7 +44,12 @@ class Scraper:
             response.raise_for_status()
             return response.content
         except Exception as e:
-            print(f"Error fetching binary {url}: {e}")
+            # Only print errors for non-known-missing images
+            if not silent:
+                # Known missing images - silently skip
+                known_missing = ['spacer.gif', 'y18.gif', 'pixel.gif', '1x1.']
+                if not any(known in url.lower() for known in known_missing):
+                    print(f"Error fetching binary {url}: {e}")
             return None
     
     def parse_date_string(self, date_str: str) -> Tuple[Optional[str], str]:
@@ -113,15 +118,22 @@ class Scraper:
             href = link.get('href', '')
             
             # Skip non-essay links (index, rss, etc.)
-            if not href or href.startswith('http') or href == 'index.html' or href.startswith('#'):
+            skip_pages = ['index.html', 'rss.html', 'faq.html', 'raq.html', 'bio.html', 'quo.html']
+            if not href:
+                continue
+            if href in skip_pages or href.startswith('#'):
+                continue
+            # Allow external URLs only for ACL chapters (on CDN)
+            if href.startswith('http') and 'paulgraham/acl' not in href:
                 continue
             
             # Skip if already seen
             if href in seen_urls:
                 continue
             
-            # Must be an HTML file
-            if not href.endswith('.html'):
+            # Must be an HTML or TXT file (check without query params)
+            href_base = href.split('?')[0]
+            if not href_base.endswith('.html') and not href_base.endswith('.txt'):
                 continue
             
             # Get title from link text
@@ -151,7 +163,14 @@ class Scraper:
             
             iso_date, raw_date = self.parse_date_string(date_str) if date_str else (None, "")
             
-            essay_id = href  # Use filename as ID
+            # Handle external URLs (like ACL chapters on CDN)
+            if href.startswith('http'):
+                full_url = href
+                # Extract ID from URL (e.g., acl1.txt from the CDN URL)
+                import os
+                essay_id = os.path.basename(href.split('?')[0])  # Remove query params
+            else:
+                essay_id = href  # Use filename as ID
             
             essays.append({
                 'id': essay_id,
@@ -161,7 +180,7 @@ class Scraper:
                 'raw_date_str': raw_date
             })
             
-            seen_urls.add(href)
+            seen_urls.add(essay_id)  # Use essay_id for dedup
         
         print(f"Found {len(essays)} essays on index page")
         return essays
@@ -169,26 +188,54 @@ class Scraper:
     def extract_date_from_essay(self, soup: BeautifulSoup) -> Tuple[Optional[str], str]:
         """
         Try to extract publication date from an essay page.
-        PG often puts dates at the top or bottom of essays.
+        PG puts dates at the very start of the content, typically like:
+        <font size="2" face="verdana">July 2023<br /><br />...
+        or:
+        <font size="2" face="verdana">March 2008, rev. June 2008<br /><br />...
+        or just a year:
+        <font size="2" face="verdana">1993...
         """
-        # Look in common locations
-        # 1. Font tags at the beginning
-        # 2. Last paragraph or font tag
-        # 3. Anywhere in the first few elements
-        
-        # Try to find date in first few font/p tags
-        for tag in soup.find_all(['font', 'p', 'div'], limit=10):
-            text = tag.get_text(strip=True)
-            if len(text) < 5 or len(text) > 100:
-                continue
+        # Find the main content font tag (size=2, face=verdana)
+        content_font = soup.find('font', {'size': '2', 'face': 'verdana'})
+        if content_font:
+            # Get the raw HTML and look for date at the very start
+            content_html = str(content_font)
             
-            # Look for date patterns
-            date_match = re.search(r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}', text, re.IGNORECASE)
+            # Pattern 1: Month Year (with optional revision)
+            date_pattern = r'>([A-Z][a-z]+ \d{4}(?:, rev\. [A-Z][a-z]+ \d{4})?)\s*<br'
+            match = re.search(date_pattern, content_html)
+            if match:
+                return self.parse_date_string(match.group(1))
+            
+            # Pattern 2: Just a year at the start (like "1993" or "2001")
+            year_pattern = r'>\s*(\d{4})\s*(?:<|[\n\r])'
+            match = re.search(year_pattern, content_html[:200])
+            if match:
+                return self.parse_date_string(match.group(1))
+        
+        # Fallback: search for date pattern in first 500 chars of any font tag
+        for tag in soup.find_all('font', limit=5):
+            html_str = str(tag)[:500]
+            
+            # Month Year pattern
+            match = re.search(r'>([A-Z][a-z]+ \d{4}(?:, rev\. [A-Z][a-z]+ \d{4})?)\s*<br', html_str)
+            if match:
+                return self.parse_date_string(match.group(1))
+            
+            # Just year pattern
+            match = re.search(r'>\s*(\d{4})\s*(?:<|[\n\r])', html_str[:200])
+            if match:
+                return self.parse_date_string(match.group(1))
+        
+        # Final fallback: search in text content
+        for tag in soup.find_all(['font', 'p', 'div'], limit=10):
+            text = tag.get_text(strip=True)[:200]
+            # Month Year
+            date_match = re.search(r'^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}', text, re.IGNORECASE)
             if date_match:
                 return self.parse_date_string(date_match.group(0))
-            
-            # Try just year
-            year_match = re.search(r'^\s*(19\d{2}|20\d{2})\s*$', text)
+            # Just year at the start
+            year_match = re.match(r'^(\d{4})\s', text)
             if year_match:
                 return self.parse_date_string(year_match.group(1))
         

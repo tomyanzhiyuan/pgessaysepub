@@ -138,8 +138,8 @@ def cmd_build(args):
                     print(" [FAILED]")
                     continue
                 
-                # Update date if we found one in the essay
-                if extracted_date and not essay_state.date:
+                # Update date from essay content (always prefer this over index page date)
+                if extracted_date:
                     essay_state.date = extracted_date
                     essay_state.raw_date_str = extracted_raw_date
                 
@@ -161,6 +161,11 @@ def cmd_build(args):
             content_html=content_html,
             date_str=essay_state.raw_date_str or essay_state.date
         )
+        
+        # Skip essays with empty/invalid content
+        if not chapter_html:
+            print(f" [SKIPPED - empty content]")
+            continue
         
         essay_dict = {
             'essay_state': essay_state,
