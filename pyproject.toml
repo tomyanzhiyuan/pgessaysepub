@@ -58,7 +58,10 @@ target-version = ["py311"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]  # Ignore line-too-long for regex patterns
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

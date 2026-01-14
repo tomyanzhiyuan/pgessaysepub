@@ -3,10 +3,9 @@ State management for tracking read/unread essays and caching metadata.
 """
 
 import json
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, List
-from dataclasses import dataclass, asdict
 
 from .config import STATE_FILE
 
@@ -17,32 +16,32 @@ class EssayState:
     essay_id: str
     title: str
     url: str
-    date: Optional[str] = None  # ISO format YYYY-MM-DD
-    raw_date_str: Optional[str] = None
+    date: str | None = None  # ISO format YYYY-MM-DD
+    raw_date_str: str | None = None
     read: bool = False
-    last_seen: Optional[str] = None  # ISO timestamp
+    last_seen: str | None = None  # ISO timestamp
 
 
 class StateManager:
     """Manages read/unread state and essay metadata."""
-    
+
     def __init__(self, state_file: Path = STATE_FILE):
         self.state_file = state_file
-        self.essays: Dict[str, EssayState] = {}
-        self.last_update: Optional[str] = None
+        self.essays: dict[str, EssayState] = {}
+        self.last_update: str | None = None
         self.load()
-    
+
     def load(self) -> None:
         """Load state from JSON file."""
         if not self.state_file.exists():
             return
-        
+
         try:
-            with open(self.state_file, 'r', encoding='utf-8') as f:
+            with open(self.state_file, encoding='utf-8') as f:
                 data = json.load(f)
-            
+
             self.last_update = data.get('last_update')
-            
+
             for essay_id, essay_data in data.get('essays', {}).items():
                 self.essays[essay_id] = EssayState(
                     essay_id=essay_id,
@@ -56,7 +55,7 @@ class StateManager:
         except Exception as e:
             print(f"Warning: Could not load state file: {e}")
             self.essays = {}
-    
+
     def save(self) -> None:
         """Save state to JSON file."""
         data = {
@@ -66,18 +65,18 @@ class StateManager:
                 for essay_id, essay in self.essays.items()
             }
         }
-        
+
         with open(self.state_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-    
+
     def update_essay(
         self,
         essay_id: str,
         title: str,
         url: str,
-        date: Optional[str] = None,
-        raw_date_str: Optional[str] = None,
-        read: Optional[bool] = None
+        date: str | None = None,
+        raw_date_str: str | None = None,
+        read: bool | None = None
     ) -> EssayState:
         """Update or create an essay's state."""
         if essay_id in self.essays:
@@ -103,10 +102,10 @@ class StateManager:
                 last_seen=datetime.now().isoformat()
             )
             self.essays[essay_id] = essay
-        
+
         return essay
-    
-    def mark_read(self, essay_ids: List[str]) -> int:
+
+    def mark_read(self, essay_ids: list[str]) -> int:
         """Mark essays as read. Returns count of essays marked."""
         count = 0
         for essay_id in essay_ids:
@@ -114,8 +113,8 @@ class StateManager:
                 self.essays[essay_id].read = True
                 count += 1
         return count
-    
-    def mark_unread(self, essay_ids: List[str]) -> int:
+
+    def mark_unread(self, essay_ids: list[str]) -> int:
         """Mark essays as unread. Returns count of essays marked."""
         count = 0
         for essay_id in essay_ids:
@@ -123,8 +122,8 @@ class StateManager:
                 self.essays[essay_id].read = False
                 count += 1
         return count
-    
-    def find_essays_by_title(self, title_query: str) -> List[str]:
+
+    def find_essays_by_title(self, title_query: str) -> list[str]:
         """Find essay IDs by partial title match (case-insensitive)."""
         title_lower = title_query.lower()
         return [
@@ -132,23 +131,23 @@ class StateManager:
             for essay_id, essay in self.essays.items()
             if title_lower in essay.title.lower()
         ]
-    
-    def get_essay(self, essay_id: str) -> Optional[EssayState]:
+
+    def get_essay(self, essay_id: str) -> EssayState | None:
         """Get essay state by ID."""
         return self.essays.get(essay_id)
-    
-    def get_all_essays(self) -> List[EssayState]:
+
+    def get_all_essays(self) -> list[EssayState]:
         """Get all essays."""
         return list(self.essays.values())
-    
-    def get_unread_essays(self) -> List[EssayState]:
+
+    def get_unread_essays(self) -> list[EssayState]:
         """Get all unread essays."""
         return [e for e in self.essays.values() if not e.read]
-    
-    def get_read_essays(self) -> List[EssayState]:
+
+    def get_read_essays(self) -> list[EssayState]:
         """Get all read essays."""
         return [e for e in self.essays.values() if e.read]
-    
+
     def reset(self) -> None:
         """Clear all state."""
         self.essays = {}
