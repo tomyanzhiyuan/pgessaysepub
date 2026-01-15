@@ -34,11 +34,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Build EPUB
+      - name: Build EPUB (with retry)
         run: |
-          python pg_to_epub.py build \
-            --output pg_essays.epub \
-            --force-refresh
+          for i in 1 2 3; do
+            echo "Attempt $i of 3..."
+            python pg_to_epub.py build \
+              --output pg_essays.epub \
+              --force-refresh && break
+            echo "Attempt $i failed, waiting 60 seconds..."
+            sleep 60
+          done
+          # Verify the file was created
+          test -f pg_essays.epub || exit 1
 
       - name: Get current date
         id: date
