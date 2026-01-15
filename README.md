@@ -6,6 +6,12 @@
 
 A command-line tool that scrapes all essays from Paul Graham's website and compiles them into a single, well-organized EPUB file optimized for Kobo e-readers.
 
+## 📥 Quick Download
+
+**Just want the EPUB?** Visit **[tomyanzhiyuan.github.io/pgessaysepub](https://tomyanzhiyuan.github.io/pgessaysepub)** to download the latest version with one click.
+
+---
+
 ## Features
 
 - **Complete Collection**: Downloads all 230+ essays from paulgraham.com
