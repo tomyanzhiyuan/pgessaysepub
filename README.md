@@ -159,10 +159,16 @@ Typical usage (update every few months):
 - Python 3.11 or higher
 - Internet connection (for initial scraping)
 
+## Disclaimer
+
+This is an **unofficial** project for personal and educational use only. All essays are copyrighted by Paul Graham and are freely available at [paulgraham.com](https://paulgraham.com).
+
+This project is not affiliated with, endorsed by, or sponsored by Paul Graham or Y Combinator. If requested by the author, this project will be taken down immediately.
+
+**Please support the original author** by visiting [paulgraham.com](https://paulgraham.com).
+
 ## License
 
 MIT License - See [LICENSE](LICENSE) for details.
 
-## Credits
-
-All essay content © Paul Graham. This tool is for personal educational use.
+*Note: The MIT license applies to the code in this repository only, not to the essay content.*
