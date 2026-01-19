@@ -50,9 +50,14 @@
             object-position: center top;
         }
 
-        /* Removed gradient overlay to show full crisp image */
         .hero-banner::after {
-            display: none;
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 150px;
+            background: linear-gradient(to top, var(--bg), transparent);
         }
 
         /* Main Content */
